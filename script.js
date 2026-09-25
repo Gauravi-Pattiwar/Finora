@@ -102,27 +102,59 @@ function openMainApp(source = "guest") {
   showToast(source === "demo" ? "Demo mode enabled." : "Welcome!");
 }
 
+async function authenticate(action, email, password) {
+  if (window.location.protocol === "file:") {
+    throw new Error("Authentication requires the deployed app or Vercel local development.");
+  }
+  const response = await fetch("/api/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, email, password }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Authentication failed");
+  localStorage.setItem("fha_auth_token", result.token);
+  localStorage.setItem("fha_user_email", result.email);
+}
+
 if (new URLSearchParams(window.location.search).has("fromProfile")) {
   openMainApp("guest");
 }
 
-signInBtn.addEventListener("click", () => {
+signInBtn.addEventListener("click", async () => {
   const email = document.getElementById("authEmail").value.trim();
   const password = document.getElementById("authPassword").value.trim();
   if (!email || !password) {
     showToast("Please enter your email and password.");
     return;
   }
-  openMainApp("signin");
+  try {
+    signInBtn.disabled = true;
+    await authenticate("login", email, password);
+    openMainApp("signin");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    signInBtn.disabled = false;
+  }
 });
 
-createAccountBtn.addEventListener("click", () => {
+createAccountBtn.addEventListener("click", async () => {
   const email = document.getElementById("authEmail").value.trim();
-  if (!email) {
-    showToast("Please enter your email to create an account.");
+  const password = document.getElementById("authPassword").value.trim();
+  if (!email || !password) {
+    showToast("Enter an email and a password with at least 8 characters.");
     return;
   }
-  openMainApp("signup");
+  try {
+    createAccountBtn.disabled = true;
+    await authenticate("register", email, password);
+    openMainApp("signup");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    createAccountBtn.disabled = false;
+  }
 });
 
 demoAccessBtn.addEventListener("click", () => {
@@ -173,11 +205,15 @@ function getMonthKey(date = new Date()) {
 
 function syncMonthlyAnalysis(snapshot) {
   const userId = localStorage.getItem("fha_user_email");
-  if (!userId || window.location.protocol === "file:") return;
+  const token = localStorage.getItem("fha_auth_token");
+  if (!userId || !token || window.location.protocol === "file:") return;
   fetch("/api/analyses", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...snapshot, userId }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(snapshot),
   }).catch(() => {
     // Local storage remains the offline fallback when the API is unavailable.
   });

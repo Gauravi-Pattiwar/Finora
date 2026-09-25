@@ -1,25 +1,12 @@
-import { MongoClient } from "mongodb";
+import { getDb } from "./_db.js";
+import { requireUser } from "./_auth.js";
 
-let clientPromise;
 let collectionPromise;
-
-function getClient() {
-  if (!process.env.MONGODB_URI) {
-    throw new Error("MONGODB_URI is not configured");
-  }
-  if (!clientPromise) {
-    clientPromise = new MongoClient(process.env.MONGODB_URI).connect();
-  }
-  return clientPromise;
-}
 
 async function getCollection() {
   if (!collectionPromise) {
     collectionPromise = (async () => {
-      const client = await getClient();
-      const collection = client
-        .db(process.env.MONGODB_DB || "finora")
-        .collection("monthlyAnalyses");
+      const collection = (await getDb()).collection("monthlyAnalyses");
       await collection.createIndex({ userId: 1, month: 1 }, { unique: true });
       return collection;
     })();
@@ -37,13 +24,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    const user = requireUser(req, res);
+    if (!user) return;
     const collection = await getCollection();
 
     if (req.method === "GET") {
-      const userId = String(req.query.userId || "").trim();
-      if (!userId) return res.status(400).json({ error: "userId is required" });
       const analyses = await collection
-        .find({ userId })
+        .find({ userId: user.email })
         .sort({ month: -1 })
         .limit(120)
         .toArray();
@@ -52,16 +39,15 @@ export default async function handler(req, res) {
 
     if (req.method === "POST") {
       const body = req.body || {};
-      const userId = String(body.userId || "").trim();
       const month = String(body.month || "").trim();
-      if (!userId || !/^\d{4}-\d{2}$/.test(month)) {
+      if (!/^\d{4}-\d{2}$/.test(month)) {
         return res
           .status(400)
-          .json({ error: "userId and a YYYY-MM month are required" });
+          .json({ error: "A YYYY-MM month is required" });
       }
 
       const snapshot = {
-        userId,
+        userId: user.email,
         month,
         assessment: body.assessment || null,
         spending: body.spending || null,
@@ -71,7 +57,7 @@ export default async function handler(req, res) {
         updatedAt: new Date(),
       };
       await collection.updateOne(
-        { userId, month },
+        { userId: user.email, month },
         { $set: snapshot },
         { upsert: true },
       );

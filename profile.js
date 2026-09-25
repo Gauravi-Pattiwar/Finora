@@ -29,9 +29,11 @@ async function loadCloudAnalyses() {
   const userId = localStorage.getItem("fha_user_email");
   if (!userId || window.location.protocol === "file:") return;
   try {
-    const response = await fetch(
-      `/api/analyses?userId=${encodeURIComponent(userId)}`,
-    );
+    const token = localStorage.getItem("fha_auth_token");
+    if (!token) return;
+    const response = await fetch("/api/analyses", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!response.ok) return;
     const analyses = await response.json();
     cloudMonthlyAnalyses = Object.fromEntries(
@@ -251,6 +253,7 @@ document.getElementById("themeToggle").addEventListener("click", () => {
 document.getElementById("logoutBtn").addEventListener("click", () => {
   localStorage.removeItem("fha_auth_source");
   localStorage.removeItem("fha_user_email");
+  localStorage.removeItem("fha_auth_token");
   window.location.href = "index.html";
 });
 document.getElementById("hamburgerBtn").addEventListener("click", () => {
