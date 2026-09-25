@@ -41,9 +41,7 @@ export default async function handler(req, res) {
       const body = req.body || {};
       const month = String(body.month || "").trim();
       if (!/^\d{4}-\d{2}$/.test(month)) {
-        return res
-          .status(400)
-          .json({ error: "A YYYY-MM month is required" });
+        return res.status(400).json({ error: "A YYYY-MM month is required" });
       }
 
       const snapshot = {

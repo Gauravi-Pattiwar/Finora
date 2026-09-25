@@ -3,7 +3,9 @@ import { getDb } from "./_db.js";
 import { createToken } from "./_auth.js";
 
 function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 export default async function handler(req, res) {
@@ -18,7 +20,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Enter a valid email address" });
     }
     if (typeof password !== "string" || password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 8 characters" });
     }
 
     const users = (await getDb()).collection("users");
@@ -26,7 +30,10 @@ export default async function handler(req, res) {
 
     if (action === "register") {
       const existing = await users.findOne({ email });
-      if (existing) return res.status(409).json({ error: "An account already exists for this email" });
+      if (existing)
+        return res
+          .status(409)
+          .json({ error: "An account already exists for this email" });
       const passwordHash = await bcrypt.hash(password, 12);
       const result = await users.insertOne({
         email,
@@ -40,7 +47,9 @@ export default async function handler(req, res) {
     if (action === "login") {
       const user = await users.findOne({ email });
       if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-        return res.status(401).json({ error: "Email or password is incorrect" });
+        return res
+          .status(401)
+          .json({ error: "Email or password is incorrect" });
       }
       return res.status(200).json({ token: createToken(user), email });
     }
@@ -48,6 +57,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Unsupported authentication action" });
   } catch (error) {
     console.error("Authentication API error:", error);
-    return res.status(500).json({ error: "Authentication service unavailable" });
+    return res
+      .status(500)
+      .json({ error: "Authentication service unavailable" });
   }
 }

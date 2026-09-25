@@ -104,7 +104,9 @@ function openMainApp(source = "guest") {
 
 async function authenticate(action, email, password) {
   if (window.location.protocol === "file:") {
-    throw new Error("Authentication requires the deployed app or Vercel local development.");
+    throw new Error(
+      "Authentication requires the deployed app or Vercel local development.",
+    );
   }
   const response = await fetch("/api/auth", {
     method: "POST",
