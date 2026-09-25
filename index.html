@@ -1,0 +1,791 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Finora - Finance + Aura</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.294.0/dist/umd/lucide.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="auth-overlay" id="authOverlay">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <span class="finora-logo" aria-hidden="true"><span>F</span></span
+          >Finora - Finance + Aura
+        </div>
+        <div class="auth-sub">
+          Welcome back. Sign in to continue or try the demo to explore the app
+          instantly.
+        </div>
+        <div class="auth-intent">
+          <i data-lucide="compass"></i
+          ><span
+            >Finora helps you understand your money, spot priorities, and plan
+            your next steps with greater clarity.</span
+          >
+        </div>
+
+        <div class="auth-form">
+          <div class="auth-field">
+            <label for="authEmail">Email</label>
+            <span class="field-help"
+              >Use an email address you can recognize.</span
+            >
+            <input id="authEmail" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="auth-field">
+            <label for="authPassword">Password</label>
+            <span class="field-help"
+              >Enter a password for this prototype account.</span
+            >
+            <input
+              id="authPassword"
+              type="password"
+              placeholder="Enter your password"
+            />
+          </div>
+
+          <div class="auth-actions">
+            <button type="button" class="btn btn-primary" id="signInBtn">
+              <i data-lucide="log-in"></i>Sign in
+            </button>
+            <div class="auth-secondary-row">
+              <button type="button" class="btn btn-ghost" id="createAccountBtn">
+                <i data-lucide="user-plus"></i>Create account
+              </button>
+              <button type="button" class="btn btn-ghost" id="demoAccessBtn">
+                <i data-lucide="sparkles"></i>Try demo
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <nav>
+      <div class="wrap navbar">
+        <div class="brand">
+          <span class="finora-logo" aria-hidden="true"><span>F</span></span
+          >Finora - Finance + Aura
+        </div>
+        <ul class="navlinks" id="navlinks">
+          <li><a href="#home">Home</a></li>
+          <li><a href="#assessment">Assessment</a></li>
+          <li><a href="#dashboard">Dashboard</a></li>
+          <li><a href="#spending">Spending</a></li>
+          <li><a href="#budget">Budget</a></li>
+          <li><a href="#goals">Goals</a></li>
+          <li><a href="#report">Report</a></li>
+          <li><a href="#recommendations">Recommendations</a></li>
+          <li><a href="profile.html">Profile</a></li>
+        </ul>
+        <div class="nav-right">
+          <button
+            class="theme-toggle"
+            id="themeToggle"
+            type="button"
+            aria-label="Toggle color theme"
+          >
+            <i class="theme-icon" id="themeIcon" data-lucide="sun"></i>
+            <span class="theme-label" id="themeLabel">Light</span>
+          </button>
+          <button class="hamburger" id="hamburgerBtn">
+            <i data-lucide="menu"></i>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <button
+      class="clear-data-fab"
+      id="clearDataBtn"
+      type="button"
+      aria-label="Clear saved financial data"
+      title="Clear saved financial data"
+    >
+      <i data-lucide="trash-2"></i><span>Clear data</span>
+    </button>
+
+    <!-- HOME -->
+    <section class="hero" id="home">
+      <div class="wrap">
+        <div class="hero-grid">
+          <div>
+            <h1>Understand Your Money.<br />Improve Your Financial Health.</h1>
+            <p class="sub">
+              A holistic financial health advisory prototype that helps you
+              understand your spending, savings, debt and financial goals.
+            </p>
+            <div class="intent-note">
+              <i data-lucide="heart-handshake"></i
+              ><span
+                >Our intention is to make personal finance feel clearer and more
+                approachable, so you can make informed decisions at your own
+                pace.</span
+              >
+            </div>
+            <div class="hero-actions">
+              <button
+                class="btn btn-primary"
+                onclick="scrollToSection('assessment')"
+              >
+                <i data-lucide="activity"></i>Check My Financial Health
+              </button>
+              <button class="btn btn-ghost" id="loadDemoHome">
+                <i data-lucide="sparkles"></i>Load Demo Data
+              </button>
+            </div>
+            <div class="hero-badges">
+              <span><i data-lucide="lock"></i>Runs 100% in your browser</span>
+              <span
+                ><i data-lucide="database"></i>Data stays on your device</span
+              >
+            </div>
+          </div>
+          <div class="flow-card">
+            <div class="flow-step">
+              <div class="dot"><i data-lucide="pencil-line"></i></div>
+              <div class="label">User Data</div>
+            </div>
+            <div class="flow-arrow">â†“</div>
+            <div class="flow-step">
+              <div class="dot"><i data-lucide="heart-pulse"></i></div>
+              <div class="label">Financial Health Assessment</div>
+            </div>
+            <div class="flow-arrow">â†“</div>
+            <div class="flow-step">
+              <div class="dot"><i data-lucide="bar-chart-3"></i></div>
+              <div class="label">Financial Analysis</div>
+            </div>
+            <div class="flow-arrow">â†“</div>
+            <div class="flow-step">
+              <div class="dot"><i data-lucide="lightbulb"></i></div>
+              <div class="label">Personalized Recommendations</div>
+            </div>
+            <div class="flow-arrow">â†“</div>
+            <div class="flow-step">
+              <div class="dot"><i data-lucide="target"></i></div>
+              <div class="label">Goal Monitoring</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="icon"><i data-lucide="gauge"></i></div>
+            <h3>Financial Health Score</h3>
+            <p>
+              A transparent 0â€“100 score built from five rule-based indicators.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="icon"><i data-lucide="pie-chart"></i></div>
+            <h3>Spending Analysis</h3>
+            <p>See exactly where your money goes across eight categories.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon"><i data-lucide="piggy-bank"></i></div>
+            <h3>Savings Tracking</h3>
+            <p>Understand your savings rate relative to income.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon"><i data-lucide="credit-card"></i></div>
+            <h3>Debt Analysis</h3>
+            <p>See how debt and EMI obligations affect your cash flow.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon"><i data-lucide="flag"></i></div>
+            <h3>Goal Tracking</h3>
+            <p>
+              Track progress toward emergency, travel, home and other goals.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="icon"><i data-lucide="message-square-text"></i></div>
+            <h3>Explainable Recommendations</h3>
+            <p>Every recommendation tells you exactly why you're seeing it.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ASSESSMENT -->
+    <section id="assessment">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">STEP 1</div>
+          <h2>Financial Assessment</h2>
+          <p>
+            Enter your financial details below, or load demo data to try the
+            system instantly.
+          </p>
+        </div>
+
+        <div class="assessment-banner" id="demoBanner">
+          <i data-lucide="check-circle-2"></i>Demo data loaded. Review the
+          values below, then calculate your financial health.
+        </div>
+
+        <div class="card">
+          <form id="assessmentForm" novalidate>
+            <div class="form-grid">
+              <div class="field">
+                <label>Monthly Income (₹)</label
+                ><span class="field-help"
+                  >Your total take-home income received each month.</span
+                ><input type="number" id="income" min="0" step="1" /><span
+                  class="err"
+                  id="err-income"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Monthly Expenses (₹)</label
+                ><span class="field-help"
+                  >Your usual monthly spending, excluding savings.</span
+                ><input type="number" id="expenses" min="0" step="1" /><span
+                  class="err"
+                  id="err-expenses"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Monthly Savings (₹)</label
+                ><span class="field-help"
+                  >The amount you set aside each month.</span
+                ><input type="number" id="savings" min="0" step="1" /><span
+                  class="err"
+                  id="err-savings"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Total Debt (₹)</label
+                ><span class="field-help"
+                  >Outstanding loans, credit card balances, and other
+                  debt.</span
+                ><input type="number" id="debt" min="0" step="1" /><span
+                  class="err"
+                  id="err-debt"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Monthly EMI (₹)</label
+                ><span class="field-help"
+                  >Total loan or credit payments due each month.</span
+                ><input type="number" id="emi" min="0" step="1" /><span
+                  class="err"
+                  id="err-emi"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Emergency Fund (₹)</label
+                ><span class="field-help"
+                  >Money reserved for unexpected expenses.</span
+                ><input
+                  type="number"
+                  id="emergencyFund"
+                  min="0"
+                  step="1"
+                /><span class="err" id="err-emergencyFund"></span>
+              </div>
+              <div class="field">
+                <label>Current Investments (₹)</label
+                ><span class="field-help"
+                  >Approximate value of your investments today.</span
+                ><input type="number" id="investments" min="0" step="1" /><span
+                  class="err"
+                  id="err-investments"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Risk Preference</label
+                ><span class="field-help"
+                  >How comfortable you are with investment ups and downs.</span
+                ><select id="riskPreference">
+                  <option value="Low">Low</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Financial Goal</label
+                ><span class="field-help"
+                  >Choose what you are currently saving toward.</span
+                >
+                <select id="goalType">
+                  <option value="Emergency Fund">Emergency Fund</option>
+                  <option value="Education">Education</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Home">Home</option>
+                  <option value="Retirement">Retirement</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Goal Timeline (months)</label
+                ><span class="field-help"
+                  >How many months you have to reach the goal.</span
+                ><input type="number" id="goalTimeline" min="1" step="1" /><span
+                  class="err"
+                  id="err-goalTimeline"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Goal Target Amount (₹)</label
+                ><span class="field-help"
+                  >The total amount you want to save.</span
+                ><input type="number" id="goalTarget" min="0" step="1" /><span
+                  class="err"
+                  id="err-goalTarget"
+                ></span>
+              </div>
+              <div class="field">
+                <label>Current Goal Amount (₹)</label
+                ><span class="field-help"
+                  >How much you have already saved for this goal.</span
+                ><input type="number" id="goalCurrent" min="0" step="1" /><span
+                  class="err"
+                  id="err-goalCurrent"
+                ></span>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                <i data-lucide="calculator"></i>Calculate My Financial Health
+              </button>
+              <button type="button" class="btn btn-ghost" id="loadDemoForm">
+                <i data-lucide="sparkles"></i>Load Demo Data
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="dashboard">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">STEP 2</div>
+          <h2>Your Financial Health Dashboard</h2>
+          <p>
+            A transparent, rule-based breakdown of your overall financial
+            health.
+          </p>
+        </div>
+
+        <div id="dashboardEmpty" class="empty-state card">
+          <i data-lucide="bar-chart-3"></i>
+          <p>Complete the assessment above to see your dashboard here.</p>
+        </div>
+
+        <div id="dashboardContent" class="hidden">
+          <div class="score-hero">
+            <div class="score-ring">
+              <svg width="150" height="150" viewBox="0 0 150 150">
+                <circle class="track" cx="75" cy="75" r="62"></circle>
+                <circle
+                  class="fill"
+                  id="scoreRingFill"
+                  cx="75"
+                  cy="75"
+                  r="62"
+                  stroke-dasharray="389"
+                  stroke-dashoffset="389"
+                ></circle>
+              </svg>
+              <div class="num">
+                <span class="val" id="overallScoreVal">0</span
+                ><span class="of">/ 100</span>
+              </div>
+            </div>
+            <div class="score-hero-text">
+              <h2>Overall Financial Health</h2>
+              <p>
+                This score combines cash flow, savings, debt, emergency fund and
+                goal progress into one transparent number.
+              </p>
+              <span class="tag" id="overallTag">â€”</span>
+            </div>
+          </div>
+
+          <div class="score-cards" id="scoreCards"></div>
+          <div class="summary-grid" id="summaryCards"></div>
+
+          <div class="charts-grid">
+            <div class="chart-card">
+              <h4>Income vs Expenses vs Savings</h4>
+              <div class="chart-box"><canvas id="chartIES"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <h4>Spending Distribution</h4>
+              <div class="chart-box"><canvas id="chartSpendMini"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SPENDING -->
+    <section id="spending">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">STEP 3</div>
+          <h2>Where Is Your Money Going?</h2>
+          <p>
+            Break your monthly spending into categories to see patterns and
+            insights.
+          </p>
+        </div>
+
+        <div class="spend-layout">
+          <div class="card">
+            <div class="spend-input-grid">
+              <div class="field">
+                <label>Food (₹)</label
+                ><span class="field-help"
+                  >Groceries, meals, and food delivery.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Food"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Transport (₹)</label
+                ><span class="field-help"
+                  >Fuel, public transit, taxis, and travel to work.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Transport"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Shopping (₹)</label
+                ><span class="field-help"
+                  >Clothing, online purchases, and personal items.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Shopping"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Entertainment (₹)</label
+                ><span class="field-help"
+                  >Subscriptions, movies, hobbies, and outings.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Entertainment"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Bills (₹)</label
+                ><span class="field-help"
+                  >Rent, utilities, phone, and regular household bills.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Bills"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Education (₹)</label
+                ><span class="field-help"
+                  >Courses, tuition, books, and learning materials.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Education"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Healthcare (₹)</label
+                ><span class="field-help"
+                  >Medicines, checkups, insurance, and medical care.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Healthcare"
+                  min="0"
+                />
+              </div>
+              <div class="field">
+                <label>Other (₹)</label
+                ><span class="field-help"
+                  >Any monthly spending that does not fit above.</span
+                ><input
+                  type="number"
+                  class="spend-input"
+                  data-cat="Other"
+                  min="0"
+                />
+              </div>
+            </div>
+            <button class="btn btn-primary" id="analyzeSpendBtn">
+              <i data-lucide="pie-chart"></i>Analyze Spending
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="spend-total">
+              <span class="lbl">Total Reported Spending</span
+              ><span class="amt" id="spendTotalVal">₹0</span>
+            </div>
+            <div class="chart-box" style="height: 200px">
+              <canvas id="chartSpendMain"></canvas>
+            </div>
+            <div class="cat-list" id="catList" style="margin-top: 18px"></div>
+          </div>
+        </div>
+        <div id="spendInsights" style="margin-top: 22px"></div>
+      </div>
+    </section>
+
+    <!-- BUDGET PLANNER -->
+    <section id="budget">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">MONTHLY PLANNING</div>
+          <h2>Monthly Budget Planner</h2>
+          <p>
+            Set a spending limit for each category and compare it with your
+            reported monthly spending.
+          </p>
+        </div>
+
+        <div class="card">
+          <form id="budgetForm">
+            <div class="budget-grid">
+              <div class="field">
+                <label>Food Budget (₹)</label
+                ><span class="field-help"
+                  >Your planned monthly limit for food.</span
+                ><input
+                  type="number"
+                  class="budget-input"
+                  data-cat="Food"
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <div class="field">
+                <label>Transport Budget (₹)</label
+                ><span class="field-help"
+                  >Your planned monthly limit for transport.</span
+                ><input
+                  type="number"
+                  class="budget-input"
+                  data-cat="Transport"
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <div class="field">
+                <label>Shopping Budget (₹)</label
+                ><span class="field-help"
+                  >Your planned monthly limit for shopping.</span
+                ><input
+                  type="number"
+                  class="budget-input"
+                  data-cat="Shopping"
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <div class="field">
+                <label>Bills Budget (₹)</label
+                ><span class="field-help"
+                  >Your planned monthly limit for regular bills.</span
+                ><input
+                  type="number"
+                  class="budget-input"
+                  data-cat="Bills"
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <div class="field">
+                <label>Other Budget (₹)</label
+                ><span class="field-help"
+                  >Your planned limit for all other spending.</span
+                ><input
+                  type="number"
+                  class="budget-input"
+                  data-cat="Other"
+                  min="0"
+                  step="1"
+                />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                <i data-lucide="save"></i>Save Budget
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost"
+                id="downloadBudgetBtn"
+              >
+                <i data-lucide="download"></i>Download Budget PDF
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="budget-results-heading">Your budget status by category</div>
+        <p class="budget-results-note">
+          These cards compare your reported spending with each planned budget. A
+          green amount means money is still available; a red amount means
+          spending has gone over the planned limit.
+        </p>
+        <div class="budget-results" id="budgetResults"></div>
+      </div>
+    </section>
+
+    <!-- RECOMMENDATIONS -->
+    <section id="recommendations">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">STEP 4</div>
+          <h2>Personalized Recommendations</h2>
+          <p>
+            Simple, explainable, rule-based guidance â€” every suggestion tells
+            you why you're seeing it.
+          </p>
+        </div>
+        <div id="recEmpty" class="empty-state card">
+          <i data-lucide="lightbulb"></i>
+          <p>
+            Complete the assessment to see personalized recommendations here.
+          </p>
+        </div>
+        <div class="rec-list hidden" id="recList"></div>
+      </div>
+    </section>
+
+    <!-- GOALS -->
+    <section id="goals">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">STEP 5</div>
+          <h2>Financial Goals</h2>
+          <p>
+            Add and track multiple goals. Saved automatically in your browser's
+            LocalStorage.
+          </p>
+        </div>
+
+        <div class="card" style="margin-bottom: 34px">
+          <form id="goalForm" class="goal-form">
+            <div class="field">
+              <label>Goal Name</label
+              ><span class="field-help"
+                >Give your goal a name you will recognize.</span
+              ><input
+                type="text"
+                id="gName"
+                placeholder="e.g. Emergency Fund"
+                required
+              />
+            </div>
+            <div class="field">
+              <label>Target Amount (₹)</label
+              ><span class="field-help"
+                >The final amount you want to reach.</span
+              ><input type="number" id="gTarget" min="1" required />
+            </div>
+            <div class="field">
+              <label>Current Amount (₹)</label
+              ><span class="field-help"
+                >The amount already saved toward this goal.</span
+              ><input type="number" id="gCurrent" min="0" required />
+            </div>
+            <div class="field">
+              <label>Target Date</label
+              ><span class="field-help"
+                >When you would like to complete the goal.</span
+              ><input type="date" id="gDate" required />
+            </div>
+            <button type="submit" class="btn btn-primary">
+              <i data-lucide="plus"></i>Add Goal
+            </button>
+          </form>
+        </div>
+
+        <div class="goal-chart-card assessment-goal-progress">
+          <h3>Financial Goal Progress</h3>
+          <p class="goal-progress-help">
+            Your progress updates after you calculate the assessment or add a
+            saved goal.
+          </p>
+          <div class="goal-summary-box" id="goalSummaryBox"></div>
+          <div class="goal-progress-track">
+            <div class="goal-progress-fill" id="goalProgressFill"></div>
+          </div>
+          <div class="goal-progress-meta">
+            <span id="goalProgressLabel">0% complete</span
+            ><span id="goalProgressRemaining">No goal set</span>
+          </div>
+        </div>
+
+        <div id="goalsEmpty" class="empty-state card">
+          <i data-lucide="flag"></i>
+          <p>No goals yet. Add your first financial goal above.</p>
+        </div>
+        <div class="goals-grid" id="goalsGrid"></div>
+      </div>
+    </section>
+
+    <!-- MONTHLY REPORT -->
+    <section id="report">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">MONTHLY SUMMARY</div>
+          <h2>Monthly Financial Report</h2>
+          <p>
+            Review your current financial picture in one place and download it
+            as a PDF.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="tool-actions">
+            <p id="reportStatus">
+              Complete your assessment to generate a full monthly report.
+            </p>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="downloadReportBtn"
+            >
+              <i data-lucide="file-down"></i>Download Report PDF
+            </button>
+          </div>
+          <div class="report-summary" id="reportSummary"></div>
+          <div id="reportDetails"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">Finora - Finance + Aura</div>
+    </footer>
+
+    <div id="toast"></div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
