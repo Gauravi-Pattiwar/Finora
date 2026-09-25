@@ -1,4 +1,5 @@
 const SAVED_PDFS_KEY = "fha_saved_pdfs";
+let cloudMonthlyAnalyses = null;
 
 function refreshIcons() {
   if (window.lucide) lucide.createIcons();
@@ -21,7 +22,25 @@ function getSavedPdfs() {
 }
 
 function getMonthlyAnalyses() {
-  return getJson("fha_monthly_analyses", {});
+  return cloudMonthlyAnalyses || getJson("fha_monthly_analyses", {});
+}
+
+async function loadCloudAnalyses() {
+  const userId = localStorage.getItem("fha_user_email");
+  if (!userId || window.location.protocol === "file:") return;
+  try {
+    const response = await fetch(
+      `/api/analyses?userId=${encodeURIComponent(userId)}`,
+    );
+    if (!response.ok) return;
+    const analyses = await response.json();
+    cloudMonthlyAnalyses = Object.fromEntries(
+      analyses.map((analysis) => [analysis.month, analysis]),
+    );
+    renderProfile();
+  } catch {
+    // Local storage remains the offline fallback when the API is unavailable.
+  }
 }
 
 function getMonthlyDocuments() {
@@ -244,3 +263,4 @@ document.querySelectorAll("#navlinks a").forEach((link) => {
 });
 
 renderProfile();
+loadCloudAnalyses();

@@ -171,11 +171,23 @@ function getMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${month}`;
 }
 
+function syncMonthlyAnalysis(snapshot) {
+  const userId = localStorage.getItem("fha_user_email");
+  if (!userId || window.location.protocol === "file:") return;
+  fetch("/api/analyses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...snapshot, userId }),
+  }).catch(() => {
+    // Local storage remains the offline fallback when the API is unavailable.
+  });
+}
+
 function saveMonthlyAnalysisSnapshot(assessment = getReportAssessment()) {
   if (!assessment) return;
   const saved = JSON.parse(localStorage.getItem(MONTHLY_ANALYSES_KEY) || "{}");
   const month = getMonthKey();
-  saved[month] = {
+  const snapshot = {
     month,
     updatedAt: new Date().toISOString(),
     assessment,
@@ -193,7 +205,9 @@ function saveMonthlyAnalysisSnapshot(assessment = getReportAssessment()) {
       ]),
     ),
   };
+  saved[month] = snapshot;
   localStorage.setItem(MONTHLY_ANALYSES_KEY, JSON.stringify(saved));
+  syncMonthlyAnalysis(snapshot);
 }
 
 const SAVED_PDFS_KEY = "fha_saved_pdfs";
