@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import authHandler from "./api/auth.js";
 import analysesHandler from "./api/analyses.js";
 import healthHandler from "./api/health.js";
+import aiHandler from "./api/ai.js";
+import profileHandler from "./api/profile.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -15,7 +17,10 @@ app.use(express.static(__dirname));
 app.all("/api/auth", authHandler);
 app.all("/api/analyses", analysesHandler);
 app.all("/api/health", healthHandler);
+app.all("/api/ai*", aiHandler);
+app.all("/api/profile", profileHandler);
 
 app.listen(port, () => {
   console.log(`Finora running at http://localhost:${port}`);
 });
+

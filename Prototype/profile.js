@@ -50,7 +50,27 @@ function getSavedPdfs() {
 }
 
 function getMonthlyAnalyses() {
-  return cloudMonthlyAnalyses || getJson(MONTHLY_ANALYSES_KEY, {});
+  const localAnalyses = getJson(MONTHLY_ANALYSES_KEY, {});
+  if (!cloudMonthlyAnalyses) return localAnalyses;
+  return Object.fromEntries(
+    [
+      ...new Set([
+        ...Object.keys(localAnalyses),
+        ...Object.keys(cloudMonthlyAnalyses),
+      ]),
+    ].map((month) => {
+      const local = localAnalyses[month] || {};
+      const cloud = cloudMonthlyAnalyses[month] || {};
+      return [
+        month,
+        {
+          ...local,
+          ...cloud,
+          ai: { ...(local.ai || {}), ...(cloud.ai || {}) },
+        },
+      ];
+    }),
+  );
 }
 
 async function loadCloudAnalyses() {
@@ -75,6 +95,20 @@ async function loadCloudAnalyses() {
 
 function getMonthlyDocuments() {
   return getJson(MONTHLY_DOCUMENTS_KEY, {});
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character],
+  );
 }
 
 function getPdfMonthKey(pdf) {
@@ -131,6 +165,125 @@ function getScore(assessment) {
   };
 }
 
+function renderAiList(title, items) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return `<div class="profile-ai-expanded-group"><h6>${escapeHtml(title)}</h6><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
+}
+
+function renderFullAiResult(type, feature) {
+  const full = feature?.full;
+  const points = Array.isArray(feature) ? feature : feature?.points || [];
+  if (!full) {
+    return points.length
+      ? `<p class="profile-ai-legacy-note">Only saved points are available for this month. Regenerate this AI result to view full details.</p>${renderAiList("Saved points", points)}`
+      : '<p class="profile-ai-legacy-note">No generated result was saved for this month.</p>';
+  }
+
+  const sections = [];
+  if (type === "summary") {
+    if (full.overallAssessment)
+      sections.push(`<p>${escapeHtml(full.overallAssessment)}</p>`);
+    sections.push(renderAiList("Strengths", full.strengths));
+    sections.push(renderAiList("Areas to improve", full.areasToImprove));
+    if (full.priorityFocus)
+      sections.push(
+        `<p><strong>Priority focus:</strong> ${escapeHtml(full.priorityFocus)}</p>`,
+      );
+    if (full.educationalNote)
+      sections.push(
+        `<p><strong>Educational note:</strong> ${escapeHtml(full.educationalNote)}</p>`,
+      );
+  } else if (type === "recommendations") {
+    const recommendations = Array.isArray(full)
+      ? full
+      : full.recommendations || [];
+    sections.push(
+      recommendations
+        .map((item) => {
+          const explanation = item.explanation || {};
+          return `<article class="profile-ai-expanded-item">
+        <h6>${escapeHtml(item.title || "Recommendation")}${item.priority ? ` <span>${escapeHtml(item.priority)}</span>` : ""}</h6>
+        ${item.recommendation ? `<p>${escapeHtml(item.recommendation)}</p>` : ""}
+        ${item.whyItMatters ? `<p><strong>Why it matters:</strong> ${escapeHtml(item.whyItMatters)}</p>` : ""}
+        ${item.relevantData ? `<p><strong>Relevant data:</strong> ${escapeHtml(item.relevantData)}</p>` : ""}
+        ${renderAiList("Data considered", explanation.dataConsidered)}
+        ${explanation.reason ? `<p><strong>Reason:</strong> ${escapeHtml(explanation.reason)}</p>` : ""}
+        ${explanation.expectedBenefit ? `<p><strong>Expected benefit:</strong> ${escapeHtml(explanation.expectedBenefit)}</p>` : ""}
+        ${explanation.assumptions ? `<p><strong>Assumptions:</strong> ${escapeHtml(explanation.assumptions)}</p>` : ""}
+        ${explanation.limitations ? `<p><strong>Limitations:</strong> ${escapeHtml(explanation.limitations)}</p>` : ""}
+      </article>`;
+        })
+        .join(""),
+    );
+  } else {
+    const plan = full.plan || {};
+    const math = full.math || {};
+    const mathRows = [
+      ["Target", math.target],
+      ["Current savings", math.current],
+      ["Remaining", math.remaining],
+      [
+        "Timeline",
+        math.timelineMonths ? `${math.timelineMonths} months` : null,
+      ],
+      ["Required monthly contribution", math.requiredMonthlyContribution],
+      ["Current monthly savings", math.currentMonthlySavings],
+      ["Current surplus", math.currentSurplus],
+      [
+        "Goal progress",
+        math.completionPercentage !== undefined
+          ? `${math.completionPercentage}%`
+          : null,
+      ],
+      ["Current monthly savings", math.currentMonthlySavings],
+      ["Current surplus", math.currentSurplus],
+      [
+        "Progress",
+        math.completionPercentage !== undefined
+          ? `${math.completionPercentage}%`
+          : null,
+      ],
+    ].filter(([, value]) => value !== undefined && value !== null);
+    if (mathRows.length) {
+      sections.push(
+        `<div class="profile-ai-expanded-math">${mathRows.map(([label, value]) => `<span>${escapeHtml(label)}<b>${typeof value === "number" ? formatINR(value) : escapeHtml(value)}</b></span>`).join("")}</div>`,
+      );
+    }
+    if (plan.goalSummary)
+      sections.push(`<p>${escapeHtml(plan.goalSummary)}</p>`);
+    if (plan.feasibilityAssessment)
+      sections.push(
+        `<p><strong>Feasibility:</strong> ${escapeHtml(plan.feasibilityAssessment)}</p>`,
+      );
+    if (Array.isArray(plan.suggestedApproach)) {
+      sections.push(
+        `<div class="profile-ai-expanded-group"><h6>Suggested approach</h6><ol>${plan.suggestedApproach.map((item) => `<li><strong>${escapeHtml(item.step)}</strong>${item.detail ? `: ${escapeHtml(item.detail)}` : ""}</li>`).join("")}</ol></div>`,
+      );
+    }
+    sections.push(
+      renderAiList("Potential challenges", plan.potentialChallenges),
+    );
+    if (Array.isArray(plan.milestonePlan) && plan.milestonePlan.length) {
+      sections.push(
+        `<div class="profile-ai-expanded-group"><h6>Milestones</h6><ul>${plan.milestonePlan.map((item) => `<li><strong>${escapeHtml(item.milestone)}</strong>${item.targetAmount ? ` (${escapeHtml(item.targetAmount)})` : ""}${item.focus ? `: ${escapeHtml(item.focus)}` : ""}</li>`).join("")}</ul></div>`,
+      );
+    }
+    if (plan.progressAdvice)
+      sections.push(
+        `<p><strong>Progress advice:</strong> ${escapeHtml(plan.progressAdvice)}</p>`,
+      );
+  }
+
+  if (full.disclaimer)
+    sections.push(
+      `<p class="profile-ai-disclaimer">${escapeHtml(full.disclaimer)}</p>`,
+    );
+  return (
+    sections.filter(Boolean).join("") ||
+    '<p class="profile-ai-legacy-note">No details were included in this generated result.</p>'
+  );
+}
+
 function downloadSavedPdf(type) {
   const pdf = getSavedPdfs()[type];
   if (!pdf) return;
@@ -162,14 +315,29 @@ function renderProfile() {
   const monthlyAnalyses = getMonthlyAnalyses();
   const monthlyDocuments = getMonthlyDocuments();
   const email = localStorage.getItem("fha_user_email");
-  const username = localStorage.getItem("fha_user_name") || email;
+  let username = localStorage.getItem("fha_user_name") || "";
+  try {
+    const registeredUsers = JSON.parse(
+      localStorage.getItem("fha_registered_users") || "[]",
+    );
+    const registeredUser = registeredUsers.find(
+      (user) => user.email?.toLowerCase() === email?.toLowerCase(),
+    );
+    if (registeredUser?.username) username = registeredUser.username;
+  } catch {
+    // Use the saved profile name when local account data is unavailable.
+  }
+  username = username || email || "Finora user";
 
-  document.getElementById("profileName").textContent =
-    username || "Finora user";
+  document.getElementById("profileName").textContent = username;
   document.getElementById("profileMeta").textContent = email
-    ? "Your financial workspace is stored locally in this browser."
+    ? "Your financial workspace and monthly analysis are saved to your account when available."
     : "Use sign in or create account to label this local workspace.";
-  document.getElementById("profileAvatar").textContent = (username || email || "F")
+  document.getElementById("profileAvatar").textContent = (
+    username ||
+    email ||
+    "F"
+  )
     .charAt(0)
     .toUpperCase();
 
@@ -248,13 +416,28 @@ function renderProfile() {
                   : `<span>${label}<b>Not generated</b></span>`;
               })
               .join("");
+            const aiLabels = [
+              ["summary", "Summary", entry.ai?.summary],
+              ["recommendations", "Recommendation", entry.ai?.recommendations],
+              ["goalPlan", "Goal plan", entry.ai?.goalPlan],
+            ];
+            const aiRows = aiLabels
+              .map(([type, label, feature]) => {
+                const points = Array.isArray(feature)
+                  ? feature
+                  : feature?.points || [];
+                const hasContent = points.length > 0 || Boolean(feature?.full);
+                return `<button type="button" class="btn btn-ghost profile-ai-tab" role="tab" aria-selected="false" aria-controls="profile-ai-details-${entry.month}" data-ai-month="${entry.month}" data-ai-type="${type}" ${hasContent ? "" : "disabled"}>${label}</button>`;
+              })
+              .join("");
+            const aiDetailsId = `profile-ai-details-${entry.month}`;
             const monthLabel = new Date(
               `${entry.month}-01T00:00:00`,
             ).toLocaleString("en-IN", {
               month: "long",
               year: "numeric",
             });
-            return `<article class="profile-month"><div class="profile-month-head"><div><h4>${monthLabel}</h4><span>Updated ${new Date(entry.updatedAt).toLocaleString("en-IN")}</span></div><strong>${entryScore.overall} / 100</strong></div><div class="profile-month-stats"><span>Income <b>${formatINR(assessment.income)}</b></span><span>Expenses <b>${formatINR(assessment.expenses)}</b></span><span>Savings <b>${formatINR(assessment.savings)}</b></span><span>Spending <b>${formatINR(spendingTotal)}</b></span><span>Debt <b>${formatINR(assessment.debt)}</b></span><span>EMI <b>${formatINR(assessment.emi)}</b></span><span>Emergency fund <b>${formatINR(assessment.emergencyFund)}</b></span><span>Investments <b>${formatINR(assessment.investments)}</b></span></div><div class="profile-month-grid"><div class="profile-month-detail"><h5>Spending categories</h5><div class="profile-month-list">${spendingRows || '<span class="profile-month-empty">No spending recorded</span>'}</div></div><div class="profile-month-detail"><h5>Budget categories</h5><div class="profile-month-list">${budgetRows || '<span class="profile-month-empty">No budget recorded</span>'}</div></div><div class="profile-month-detail"><h5>Goals</h5><div class="profile-month-list">${goalRows}</div></div><div class="profile-month-detail"><h5>Documents</h5><div class="profile-month-list">${documentRows}</div></div></div></article>`;
+            return `<article class="profile-month"><div class="profile-month-head"><div><h4>${monthLabel}</h4><span>Updated ${new Date(entry.updatedAt).toLocaleString("en-IN")}</span></div><strong>${entryScore.overall} / 100</strong></div><div class="profile-month-stats"><span>Income <b>${formatINR(assessment.income)}</b></span><span>Expenses <b>${formatINR(assessment.expenses)}</b></span><span>Savings <b>${formatINR(assessment.savings)}</b></span><span>Spending <b>${formatINR(spendingTotal)}</b></span><span>Debt <b>${formatINR(assessment.debt)}</b></span><span>EMI <b>${formatINR(assessment.emi)}</b></span><span>Emergency fund <b>${formatINR(assessment.emergencyFund)}</b></span><span>Investments <b>${formatINR(assessment.investments)}</b></span></div><div class="profile-month-grid"><div class="profile-month-detail"><h5>Spending categories</h5><div class="profile-month-list">${spendingRows || '<span class="profile-month-empty">No spending recorded</span>'}</div></div><div class="profile-month-detail"><h5>Budget categories</h5><div class="profile-month-list">${budgetRows || '<span class="profile-month-empty">No budget recorded</span>'}</div></div><div class="profile-month-detail"><h5>Goals</h5><div class="profile-month-list">${goalRows}</div></div><div class="profile-month-detail"><h5>Documents</h5><div class="profile-month-list">${documentRows}</div></div><div class="profile-month-detail profile-month-ai-detail"><h5>AI-generated points</h5><div class="profile-ai-tabs" role="tablist" aria-label="AI generated content">${aiRows}</div><div id="${aiDetailsId}" class="profile-ai-details hidden" role="tabpanel" aria-live="polite"></div></div></div></article>`;
           })
           .join("")
       : '<p class="profile-empty">No monthly analysis saved yet. Calculate your assessment from the main website.</p>';
@@ -298,6 +481,36 @@ document.querySelectorAll("#navlinks a").forEach((link) => {
     document.getElementById("navlinks").classList.remove("open"),
   );
 });
+
+document
+  .getElementById("profileMonthlyAnalyses")
+  .addEventListener("click", (event) => {
+    const collapseButton = event.target.closest(".profile-ai-collapse");
+    if (collapseButton) {
+      const card = collapseButton.closest(".profile-month-ai-detail");
+      card.querySelector(".profile-ai-details").classList.add("hidden");
+      card.querySelectorAll(".profile-ai-tab").forEach((tab) => {
+        tab.setAttribute("aria-selected", "false");
+      });
+      return;
+    }
+
+    const button = event.target.closest(".profile-ai-tab");
+    if (!button || button.disabled) return;
+
+    const card = button.closest(".profile-month-ai-detail");
+    const panel = card.querySelector(".profile-ai-details");
+    const entry = getMonthlyAnalyses()[button.dataset.aiMonth];
+    const feature = entry?.ai?.[button.dataset.aiType];
+    if (!panel || !feature) return;
+
+    card.querySelectorAll(".profile-ai-tab").forEach((tab) => {
+      tab.setAttribute("aria-selected", String(tab === button));
+    });
+    panel.innerHTML = `<button type="button" class="profile-ai-collapse" aria-label="Close generated content" title="Close generated content"><i data-lucide="chevron-up"></i></button><div class="profile-ai-full-result">${renderFullAiResult(button.dataset.aiType, feature)}</div>`;
+    panel.classList.remove("hidden");
+    refreshIcons();
+  });
 
 renderProfile();
 loadCloudAnalyses();

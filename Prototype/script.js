@@ -57,8 +57,8 @@ const DEMO = {
   riskPreference: "Medium",
   goalType: "Emergency Fund",
   goalTimeline: 6,
-  goalTarget: 0,
-  goalCurrent: 0,
+  goalTarget: 120000,
+  goalCurrent: 70000,
 };
 const DEMO_SPEND = {
   Food: 6000,
@@ -215,8 +215,7 @@ function saveCurrentUserWorkspace() {
         getSpendData() ||
         JSON.parse(localStorage.getItem("fha_spending") || "null"),
       budgets:
-        getBudgets() ||
-        JSON.parse(localStorage.getItem("fha_budgets") || "{}"),
+        getBudgets() || JSON.parse(localStorage.getItem("fha_budgets") || "{}"),
       goals:
         getGoals() || JSON.parse(localStorage.getItem("fha_goals") || "[]"),
       savedPdfs:
@@ -246,8 +245,7 @@ function loadCurrentUserWorkspace() {
         localStorage.setItem("fha_spending", JSON.stringify(ws.spending));
       if (ws.budgets)
         localStorage.setItem("fha_budgets", JSON.stringify(ws.budgets));
-      if (ws.goals)
-        localStorage.setItem("fha_goals", JSON.stringify(ws.goals));
+      if (ws.goals) localStorage.setItem("fha_goals", JSON.stringify(ws.goals));
       if (ws.savedPdfs)
         localStorage.setItem(SAVED_PDFS_KEY, JSON.stringify(ws.savedPdfs));
       if (ws.monthlyAnalyses)
@@ -411,7 +409,9 @@ async function authenticate(action, email, password, username) {
     if (!user) {
       const isEmail = rawTarget.includes("@");
       const derivedUsername = isEmail ? rawTarget.split("@")[0] : rawTarget;
-      const derivedEmail = isEmail ? rawTarget : `${rawTarget.toLowerCase().replace(/[^a-z0-9]/g, "") || "user"}@example.com`;
+      const derivedEmail = isEmail
+        ? rawTarget
+        : `${rawTarget.toLowerCase().replace(/[^a-z0-9]/g, "") || "user"}@example.com`;
       user = {
         username: derivedUsername || "Finora User",
         email: derivedEmail,
@@ -607,6 +607,73 @@ function syncMonthlyAnalysis(snapshot) {
   });
 }
 
+function compactMonthlyAiPoints(values) {
+  return values
+    .map((value) => {
+      const text = String(value || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const sentence = text.match(/^(.+?[.!?])(?:\s+|$)/)?.[1] || text;
+      const words = sentence.split(" ").filter(Boolean);
+      if (words.length > 16) return `${words.slice(0, 16).join(" ")}...`;
+      return sentence && /[.!?]$/.test(sentence)
+        ? sentence
+        : sentence
+          ? `${sentence}.`
+          : "";
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function saveMonthlyAiContent(type, result) {
+  let values = [];
+  if (type === "summary") {
+    values = [
+      result.overallAssessment,
+      result.priorityFocus,
+      result.areasToImprove?.[0] || result.strengths?.[0],
+    ];
+  } else if (type === "recommendations") {
+    values = (result.recommendations || []).map((item) => {
+      const title = String(item.title || "").trim();
+      const recommendation = String(item.recommendation || "").trim();
+      return title && recommendation
+        ? `${title.replace(/[.!?]+$/, "")}: ${recommendation}`
+        : recommendation || title;
+    });
+  } else if (type === "goalPlan") {
+    const plan = result.plan || {};
+    const firstStep = plan.suggestedApproach?.[0];
+    values = [
+      plan.goalSummary,
+      plan.feasibilityAssessment,
+      firstStep?.detail || firstStep?.step,
+      plan.progressAdvice,
+    ];
+  }
+
+  const saved = JSON.parse(localStorage.getItem(MONTHLY_ANALYSES_KEY) || "{}");
+  const month = getMonthKey();
+  const snapshot = saved[month] || {
+    month,
+    assessment: getReportAssessment() || null,
+    spending: getSpendData() || null,
+    budgets: getBudgets() || {},
+    goals: getGoals() || [],
+    pdfs: {},
+  };
+  const points = compactMonthlyAiPoints(values);
+  const aiContent = { points, full: result };
+  snapshot.ai = { ...(snapshot.ai || {}), [type]: aiContent };
+  snapshot.updatedAt = new Date().toISOString();
+  saved[month] = snapshot;
+  localStorage.setItem(MONTHLY_ANALYSES_KEY, JSON.stringify(saved));
+  saveCurrentUserWorkspace();
+  syncMonthlyAnalysis({ month, ai: { [type]: aiContent } });
+  renderProfile();
+}
+
 function saveMonthlyAnalysisSnapshot(assessment = getReportAssessment()) {
   if (!assessment) return;
   const saved = JSON.parse(localStorage.getItem(MONTHLY_ANALYSES_KEY) || "{}");
@@ -618,6 +685,7 @@ function saveMonthlyAnalysisSnapshot(assessment = getReportAssessment()) {
     spending: getSpendData(),
     budgets: getBudgets(),
     goals: getGoals(),
+    ai: saved[month]?.ai || {},
     pdfs: Object.fromEntries(
       Object.entries(getSavedPdfs()).map(([type, pdf]) => [
         type,
@@ -699,7 +767,9 @@ function renderProfile() {
       : "Use sign in or create account to label this local workspace.";
   }
   if (profileAvatar) {
-    profileAvatar.textContent = (username || email || "F").charAt(0).toUpperCase();
+    profileAvatar.textContent = (username || email || "F")
+      .charAt(0)
+      .toUpperCase();
   }
 
   const stats = [
@@ -1648,9 +1718,27 @@ document
   });
 
 /* ============================================================
-   RECOMMENDATION ENGINE â€” rule-based, explainable
+   RECOMMENDATION ENGINE — Rule-based baseline & AI-enhanced
    ============================================================ */
+let activeRecMode = "ai"; // "ai" or "rule"
+let cachedAiRecs = null;
+let cachedAiSummary = null;
+let cachedAiGoalPlan = null;
+
 function renderRecommendations(v, s) {
+  // Always calculate and render the transparent Phase 1 rule-based recommendations first
+  renderRuleBasedRecommendations(v, s);
+
+  // If AI mode is active or user requested AI insights, trigger AI recommendations
+  if (v && v.income > 0) {
+    updateAiGoalSelector();
+    if (activeRecMode === "ai") {
+      fetchAndRenderAiRecommendations(false);
+    }
+  }
+}
+
+function renderRuleBasedRecommendations(v, s) {
   const recs = [];
 
   if (s.savingsRate < 0.15) {
@@ -1659,7 +1747,7 @@ function renderRecommendations(v, s) {
       tone: "amber",
       title: "Increase your savings rate",
       text: "Your current savings rate is relatively low. Reviewing discretionary expenses may help increase monthly savings.",
-      why: `Your savings rate is approximately ${Math.round(s.savingsRate * 100)}% of your monthly income, below the healthy 15â€“20% benchmark used in this assessment.`,
+      why: `Your savings rate is approximately ${Math.round(s.savingsRate * 100)}% of your monthly income, below the healthy 15–20% benchmark used in this assessment.`,
     });
   }
   if (s.monthsCovered < 3) {
@@ -1668,7 +1756,7 @@ function renderRecommendations(v, s) {
       tone: "red",
       title: "Build your emergency fund",
       text: "Your emergency fund currently covers less than approximately 3 months of reported expenses. Consider gradually building an emergency reserve.",
-      why: `Your emergency fund covers approximately ${s.monthsCovered.toFixed(1)} months of reported expenses, below the recommended 3â€“6 month buffer.`,
+      why: `Your emergency fund covers approximately ${s.monthsCovered.toFixed(1)} months of reported expenses, below the recommended 3–6 month buffer.`,
     });
   }
   const expenseRatio = v.income > 0 ? v.expenses / v.income : 0;
@@ -1714,9 +1802,12 @@ function renderRecommendations(v, s) {
     red: "var(--red)",
     emerald: "var(--emerald)",
   };
-  document.getElementById("recEmpty").classList.add("hidden");
+  const emptyEl = document.getElementById("recEmpty");
+  if (emptyEl) emptyEl.classList.add("hidden");
+
   const list = document.getElementById("recList");
-  list.classList.remove("hidden");
+  if (!list) return;
+
   list.innerHTML = recs
     .map(
       (r, i) => `
@@ -1724,9 +1815,12 @@ function renderRecommendations(v, s) {
       <div class="rec-top">
         <div class="icon" style="background:${toneColor[r.tone]}22;"><i data-lucide="${r.icon}" style="color:${toneColor[r.tone]};"></i></div>
         <div class="body">
-          <h4>${r.title}</h4>
+          <div class="rec-card-header-row">
+            <h4>${r.title}</h4>
+            <span class="rec-priority-badge ${r.tone}">${r.tone === "red" ? "Priority" : r.tone === "amber" ? "Moderate" : "Healthy"}</span>
+          </div>
           <p>${r.text}</p>
-          <button class="rec-toggle" onclick="toggleWhy(${i})"><i data-lucide="chevron-down" id="chev-${i}"></i>Why am I seeing this?</button>
+          <button type="button" class="rec-toggle" onclick="toggleWhy(${i})"><i data-lucide="chevron-down" id="chev-${i}"></i>Why am I seeing this?</button>
           <div class="rec-why" id="why-${i}">${r.why}</div>
         </div>
       </div>
@@ -1736,17 +1830,741 @@ function renderRecommendations(v, s) {
     .join("");
   refreshIcons();
 }
+
 function toggleWhy(i) {
   const el = document.getElementById("why-" + i);
   const chev = document.getElementById("chev-" + i);
+  if (!el) return;
   el.classList.toggle("open");
-  chev.style.transform = el.classList.contains("open")
-    ? "rotate(180deg)"
-    : "rotate(0deg)";
+  if (chev) {
+    chev.style.transform = el.classList.contains("open")
+      ? "rotate(180deg)"
+      : "rotate(0deg)";
+  }
+}
+
+function toggleAiExplain(id) {
+  const el = document.getElementById("ai-explain-" + id);
+  const chev = document.getElementById("ai-chev-" + id);
+  if (!el) return;
+  el.classList.toggle("open");
+  if (chev) {
+    chev.style.transform = el.classList.contains("open")
+      ? "rotate(180deg)"
+      : "rotate(0deg)";
+  }
 }
 
 /* ============================================================
-   GOALS â€” stored in LocalStorage
+   PHASE 2: AI BACKEND API CALLS & PROFILE BUILDER
+   ============================================================ */
+function buildAiProfilePayload() {
+  const v = getReportAssessment() || lastValues;
+  if (!v || v.income <= 0) return null;
+  const s = lastScores || computeScores(v);
+  const spend = getSpendData();
+  const goals = getGoals();
+
+  const spendingMap = {};
+  if (spend && spend.labels) {
+    spend.labels.forEach((cat, idx) => {
+      spendingMap[cat] = spend.values[idx] || 0;
+    });
+  }
+
+  return {
+    income: v.income,
+    expenses: v.expenses,
+    savings: v.savings,
+    debt: v.debt,
+    emi: v.emi,
+    emergencyFund: v.emergencyFund,
+    investments: v.investments,
+    riskPreference: v.riskPreference,
+    goalType: v.goalType,
+    goalTimeline: v.goalTimeline,
+    goalTarget: v.goalTarget,
+    goalCurrent: v.goalCurrent,
+    overallScore: s.overall,
+    cashFlow: s.cashFlow,
+    savingsScore: s.savingsScore,
+    debtScore: s.debtScore,
+    efScore: s.efScore,
+    goalScore: s.goalScore,
+    monthsCovered: s.monthsCovered,
+    savingsRate: s.savingsRate,
+    emiRatio: s.emiRatio,
+    expenseRatio: v.income > 0 ? v.expenses / v.income : 0,
+    spending: spendingMap,
+    additionalGoals: goals.map((g) => ({
+      name: g.name,
+      target: g.target,
+      current: g.current,
+      date: g.date,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------
+   FEATURE 1: AI FINANCIAL HEALTH SUMMARY
+   ------------------------------------------------------------ */
+const generateAiSummaryBtn = document.getElementById("generateAiSummaryBtn");
+const retryAiSummaryBtn = document.getElementById("retryAiSummaryBtn");
+const aiSummaryLoading = document.getElementById("aiSummaryLoading");
+const aiSummaryError = document.getElementById("aiSummaryError");
+const aiSummaryErrorMsg = document.getElementById("aiSummaryErrorMsg");
+const aiSummaryContent = document.getElementById("aiSummaryContent");
+
+async function generateAiSummary() {
+  const profile = buildAiProfilePayload();
+  if (!profile) {
+    showToast("Please calculate your financial assessment first.");
+    scrollToSection("assessment");
+    return;
+  }
+
+  if (generateAiSummaryBtn) {
+    generateAiSummaryBtn.disabled = true;
+    generateAiSummaryBtn.innerHTML =
+      '<i data-lucide="loader-2" class="spin"></i><span>Analyzing...</span>';
+  }
+  if (aiSummaryLoading) aiSummaryLoading.classList.remove("hidden");
+  if (aiSummaryError) aiSummaryError.classList.add("hidden");
+  if (aiSummaryContent) aiSummaryContent.classList.add("hidden");
+  refreshIcons();
+
+  try {
+    const response = await fetch("/api/ai/summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result || result.success === false) {
+      throw new Error(
+        result?.error ||
+          result?.fallbackMessage ||
+          "AI service is temporarily unavailable.",
+      );
+    }
+
+    cachedAiSummary = result;
+    saveMonthlyAiContent("summary", result);
+    renderAiSummary(result);
+    showToast("✨ AI Financial Health Summary generated!");
+  } catch (err) {
+    console.warn("AI Summary Error:", err);
+    if (aiSummaryError) {
+      aiSummaryError.classList.remove("hidden");
+      if (aiSummaryErrorMsg) {
+        aiSummaryErrorMsg.textContent =
+          err.message ||
+          "AI analysis is temporarily unavailable. Your existing financial dashboard and rule-based analysis are still available.";
+      }
+    }
+  } finally {
+    if (aiSummaryLoading) aiSummaryLoading.classList.add("hidden");
+    if (generateAiSummaryBtn) {
+      generateAiSummaryBtn.disabled = false;
+      generateAiSummaryBtn.innerHTML =
+        '<i data-lucide="sparkles"></i><span>Regenerate AI Summary</span>';
+    }
+    refreshIcons();
+  }
+}
+
+function renderAiSummary(data) {
+  if (!aiSummaryContent || !data) return;
+
+  const strengthsList = (data.strengths || [])
+    .map(
+      (s) =>
+        `<li><i data-lucide="check-circle-2" style="color:var(--emerald);"></i><span>${s}</span></li>`,
+    )
+    .join("");
+
+  const improvementsList = (data.areasToImprove || [])
+    .map(
+      (item) =>
+        `<li><i data-lucide="alert-triangle" style="color:var(--amber);"></i><span>${item}</span></li>`,
+    )
+    .join("");
+
+  aiSummaryContent.innerHTML = `
+    <div class="ai-overview-box">
+      <div class="ai-box-head"><i data-lucide="brain"></i>Overall Assessment</div>
+      <p>${data.overallAssessment || "Your financial profile shows a solid baseline with specific opportunities for optimization."}</p>
+    </div>
+
+    <div class="ai-columns-grid">
+      <div class="ai-column-card strengths">
+        <div class="ai-column-head"><i data-lucide="trending-up"></i>Key Strengths</div>
+        <ul class="ai-bullet-list">${strengthsList || "<li><i data-lucide='check'></i><span>Consistent cash flow management</span></li>"}</ul>
+      </div>
+
+      <div class="ai-column-card improvements">
+        <div class="ai-column-head"><i data-lucide="shield-alert"></i>Areas to Improve</div>
+        <ul class="ai-bullet-list">${improvementsList || "<li><i data-lucide='alert-circle'></i><span>Emergency fund strengthening</span></li>"}</ul>
+      </div>
+    </div>
+
+    ${
+      data.priorityFocus
+        ? `
+    <div class="ai-focus-box">
+      <div class="ai-focus-icon"><i data-lucide="compass"></i></div>
+      <div class="ai-focus-text">
+        <h4>Priority Focus</h4>
+        <p>${data.priorityFocus}</p>
+      </div>
+    </div>`
+        : ""
+    }
+
+    ${
+      data.educationalNote
+        ? `
+    <div style="font-size:0.84rem;color:var(--text-dim);background:var(--surface);padding:10px 14px;border-radius:10px;border:1px solid var(--line);">
+      <strong style="color:var(--teal-light);"><i data-lucide="book-open" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>Educational Context:</strong> ${data.educationalNote}
+    </div>`
+        : ""
+    }
+
+    <div class="ai-meta-bar">
+      <span class="ai-model-tag"><i data-lucide="cpu"></i>Powered by Finora AI</span>
+      <span style="font-size:0.72rem;color:var(--text-faint);font-style:italic;">Not advice from a certified financial advisor.</span>
+    </div>
+  `;
+
+  aiSummaryContent.classList.remove("hidden");
+  refreshIcons();
+}
+
+if (generateAiSummaryBtn) {
+  generateAiSummaryBtn.addEventListener("click", generateAiSummary);
+}
+if (retryAiSummaryBtn) {
+  retryAiSummaryBtn.addEventListener("click", generateAiSummary);
+}
+
+/* ------------------------------------------------------------
+   FEATURE 2 & 3: PERSONALIZED RECOMMENDATIONS + EXPLAINABLE AI
+   ------------------------------------------------------------ */
+const recTabAi = document.getElementById("recTabAi");
+const recTabRule = document.getElementById("recTabRule");
+const refreshAiRecsBtn = document.getElementById("refreshAiRecsBtn");
+const aiRecsLoading = document.getElementById("aiRecsLoading");
+const aiRecsError = document.getElementById("aiRecsError");
+const aiRecsErrorMsg = document.getElementById("aiRecsErrorMsg");
+const aiRecList = document.getElementById("aiRecList");
+
+function setRecTab(mode) {
+  activeRecMode = mode;
+  const ruleList = document.getElementById("recList");
+  const emptyEl = document.getElementById("recEmpty");
+
+  if (mode === "ai") {
+    if (recTabAi) recTabAi.classList.add("active");
+    if (recTabRule) recTabRule.classList.remove("active");
+    if (ruleList) ruleList.classList.add("hidden");
+
+    if (cachedAiRecs && cachedAiRecs.length > 0) {
+      if (aiRecList) aiRecList.classList.remove("hidden");
+      if (emptyEl) emptyEl.classList.add("hidden");
+    } else {
+      fetchAndRenderAiRecommendations(false);
+    }
+  } else {
+    if (recTabRule) recTabRule.classList.add("active");
+    if (recTabAi) recTabAi.classList.remove("active");
+    if (aiRecList) aiRecList.classList.add("hidden");
+    if (aiRecsLoading) aiRecsLoading.classList.add("hidden");
+    if (aiRecsError) aiRecsError.classList.add("hidden");
+
+    if (ruleList) ruleList.classList.remove("hidden");
+    const v = getReportAssessment() || lastValues;
+    if (emptyEl) emptyEl.classList.toggle("hidden", !!v);
+  }
+}
+
+if (recTabAi) recTabAi.addEventListener("click", () => setRecTab("ai"));
+if (recTabRule) recTabRule.addEventListener("click", () => setRecTab("rule"));
+if (refreshAiRecsBtn) {
+  refreshAiRecsBtn.addEventListener("click", () =>
+    fetchAndRenderAiRecommendations(true),
+  );
+}
+
+async function fetchAndRenderAiRecommendations(forceRefresh = false) {
+  const profile = buildAiProfilePayload();
+  const ruleList = document.getElementById("recList");
+  const emptyEl = document.getElementById("recEmpty");
+
+  if (!profile) {
+    if (emptyEl) emptyEl.classList.remove("hidden");
+    if (aiRecList) aiRecList.classList.add("hidden");
+    return;
+  }
+
+  if (!forceRefresh && cachedAiRecs && cachedAiRecs.length > 0) {
+    renderAiRecommendations(
+      cachedAiRecs,
+      localStorage.getItem("fha_ai_model") || "Finora AI",
+    );
+    return;
+  }
+
+  if (refreshAiRecsBtn) {
+    refreshAiRecsBtn.disabled = true;
+    refreshAiRecsBtn.innerHTML =
+      '<i data-lucide="loader-2" class="spin"></i><span>Analyzing...</span>';
+  }
+  if (aiRecsLoading) aiRecsLoading.classList.remove("hidden");
+  if (aiRecsError) aiRecsError.classList.add("hidden");
+  if (aiRecList) aiRecList.classList.add("hidden");
+  refreshIcons();
+
+  try {
+    const response = await fetch("/api/ai/recommendations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result || result.success === false) {
+      throw new Error(
+        result?.error ||
+          result?.fallbackMessage ||
+          "AI recommendation service temporarily unavailable.",
+      );
+    }
+
+    cachedAiRecs = result.recommendations || [];
+    saveMonthlyAiContent("recommendations", result);
+
+    renderAiRecommendations(cachedAiRecs, result.modelUsed);
+    if (forceRefresh) showToast("✨ Personalized AI recommendations updated!");
+  } catch (err) {
+    console.warn("AI Recommendations Error:", err);
+    if (aiRecsError) {
+      aiRecsError.classList.remove("hidden");
+      if (aiRecsErrorMsg) {
+        aiRecsErrorMsg.textContent =
+          "AI recommendations are temporarily unavailable. Displaying transparent rule-based guidance.";
+      }
+    }
+    // Smooth fallback to rule-based recommendations
+    if (ruleList) ruleList.classList.remove("hidden");
+  } finally {
+    if (aiRecsLoading) aiRecsLoading.classList.add("hidden");
+    if (refreshAiRecsBtn) {
+      refreshAiRecsBtn.disabled = false;
+      refreshAiRecsBtn.innerHTML =
+        '<i data-lucide="refresh-cw"></i><span>Refresh AI Insights</span>';
+    }
+    refreshIcons();
+  }
+}
+
+function renderAiRecommendations(recs, modelUsed) {
+  if (!aiRecList) return;
+  const emptyEl = document.getElementById("recEmpty");
+  if (emptyEl) emptyEl.classList.add("hidden");
+
+  if (!recs || recs.length === 0) {
+    aiRecList.innerHTML =
+      '<div class="card" style="text-align:center;padding:24px;color:var(--text-dim);">No AI recommendations generated yet. Complete the assessment above.</div>';
+    aiRecList.classList.remove("hidden");
+    return;
+  }
+
+  const toneColorMap = {
+    emerald: "var(--emerald)",
+    amber: "var(--amber)",
+    red: "var(--red)",
+  };
+
+  const cardsHtml = recs
+    .map((r, i) => {
+      const priorityClass = (r.priority || "Medium").toLowerCase();
+      const toneHex = toneColorMap[r.tone] || "var(--teal)";
+      const iconName = r.icon || "lightbulb";
+      const exp = r.explanation || {};
+      const dataItems = Array.isArray(exp.dataConsidered)
+        ? exp.dataConsidered
+        : [exp.dataConsidered].filter(Boolean);
+
+      return `
+    <div class="rec-card">
+      <div class="rec-top">
+        <div class="icon" style="background:${toneHex}22;"><i data-lucide="${iconName}" style="color:${toneHex};"></i></div>
+        <div class="body">
+          <div class="rec-card-header-row">
+            <h4>${r.title}</h4>
+            <div class="rec-badges-group">
+              <span class="rec-priority-badge ${priorityClass}">
+                <i data-lucide="${priorityClass === "high" ? "alert-circle" : priorityClass === "medium" ? "clock" : "sparkles"}"></i>
+                ${r.priority || "Recommendation"} Priority
+              </span>
+              ${r.relevantData ? `<span class="rec-relevant-data">${r.relevantData}</span>` : ""}
+            </div>
+          </div>
+
+          <p style="font-size:0.92rem;line-height:1.5;color:var(--text);margin-bottom:6px;">${r.recommendation}</p>
+
+          ${
+            r.whyItMatters
+              ? `<div class="rec-why-matters"><strong>Why it matters:</strong> ${r.whyItMatters}</div>`
+              : ""
+          }
+
+          <div style="margin-top:12px;">
+            <button type="button" class="rec-toggle" onclick="toggleAiExplain(${i})">
+              <i data-lucide="chevron-down" id="ai-chev-${i}"></i>
+              <span>Why am I seeing this? (Explainable AI)</span>
+            </button>
+          </div>
+
+          <!-- EXPLAINABLE AI EXPANDABLE DRAWER -->
+          <div class="rec-explainable-box" id="ai-explain-${i}">
+            <div class="rec-explain-head"><i data-lucide="help-circle"></i>Transparent Explanation Details</div>
+            <div class="rec-explain-grid">
+              <div class="rec-explain-section">
+                <div class="rec-explain-lbl">1. Financial Data Considered</div>
+                <div class="rec-data-pills">
+                  ${
+                    dataItems.length > 0
+                      ? dataItems
+                          .map((d) => `<span class="rec-data-pill">${d}</span>`)
+                          .join("")
+                      : `<span class="rec-data-pill">Assessed monthly income, expenses, and savings</span>`
+                  }
+                </div>
+              </div>
+
+              <div class="rec-explain-section">
+                <div class="rec-explain-lbl">2. Algorithmic Reason</div>
+                <div class="rec-explain-val">${exp.reason || r.whyItMatters || "Calculated from financial benchmark analysis."}</div>
+              </div>
+
+              <div class="rec-explain-section">
+                <div class="rec-explain-lbl">3. Expected Holistic Benefit</div>
+                <div class="rec-explain-val">${exp.expectedBenefit || "Enhances long-term financial resilience and cash-flow health."}</div>
+              </div>
+
+              <div class="rec-explain-section">
+                <div class="rec-explain-lbl">4. Model Assumptions</div>
+                <div class="rec-explain-val" style="color:var(--text-dim);font-size:0.8rem;">
+                  ${exp.assumptions || "Assumes the reported expenses and income reflect consistent regular monthly patterns."}
+                </div>
+              </div>
+
+              <div class="rec-explain-section">
+                <div class="rec-explain-lbl">5. Limitations & Advisory Scope</div>
+                <div class="rec-explain-val" style="color:var(--text-faint);font-size:0.78rem;">
+                  ${exp.limitations || "This guidance is educational and does not constitute certified financial or investment advice."}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    })
+    .join("");
+
+  aiRecList.innerHTML = `
+    ${cardsHtml}
+    <p style="font-size:0.72rem;color:var(--text-faint);font-style:italic;margin-top:10px;text-align:center;">Not advice from a certified financial advisor.</p>
+  `;
+
+  aiRecList.classList.remove("hidden");
+  refreshIcons();
+}
+
+/* ------------------------------------------------------------
+   FEATURE 4: AI GOAL PLANNER
+   ------------------------------------------------------------ */
+const aiGoalSelector = document.getElementById("aiGoalSelector");
+const generateAiGoalPlanBtn = document.getElementById("generateAiGoalPlanBtn");
+const retryAiGoalPlanBtn = document.getElementById("retryAiGoalPlanBtn");
+const aiGoalPlanLoading = document.getElementById("aiGoalPlanLoading");
+const aiGoalPlanError = document.getElementById("aiGoalPlanError");
+const aiGoalPlanErrorMsg = document.getElementById("aiGoalPlanErrorMsg");
+const aiGoalPlanContent = document.getElementById("aiGoalPlanContent");
+
+function updateAiGoalSelector() {
+  if (!aiGoalSelector) return;
+  const assessment = getReportAssessment() || lastValues;
+  const goals = getGoals();
+
+  const options = [];
+  if (assessment && assessment.goalTarget > 0) {
+    options.push({
+      id: "primary",
+      name: `${assessment.goalType} (Assessment Primary Goal)`,
+      target: assessment.goalTarget,
+      current: assessment.goalCurrent,
+      timelineMonths: assessment.goalTimeline || 6,
+    });
+  }
+
+  goals.forEach((g) => {
+    // Calculate approximate months from target date
+    let months = 6;
+    if (g.date) {
+      const targetDate = new Date(g.date);
+      const now = new Date();
+      const diffMonths =
+        (targetDate.getFullYear() - now.getFullYear()) * 12 +
+        (targetDate.getMonth() - now.getMonth());
+      months = Math.max(1, diffMonths);
+    }
+    options.push({
+      id: String(g.id),
+      name: g.name,
+      target: g.target,
+      current: g.current,
+      timelineMonths: months,
+    });
+  });
+
+  if (options.length === 0) {
+    aiGoalSelector.innerHTML =
+      '<option value="">No goal configured yet</option>';
+    return;
+  }
+
+  const prevValue = aiGoalSelector.value;
+  aiGoalSelector.innerHTML = options
+    .map(
+      (opt) =>
+        `<option value="${opt.id}" data-target="${opt.target}" data-current="${opt.current}" data-timeline="${opt.timelineMonths}" data-name="${opt.name}">${opt.name} — Target: ${formatINR(opt.target)}</option>`,
+    )
+    .join("");
+
+  if (prevValue && options.some((o) => o.id === prevValue)) {
+    aiGoalSelector.value = prevValue;
+  }
+}
+
+async function generateAiGoalPlan() {
+  const assessment = getReportAssessment() || lastValues;
+  const selectedOption =
+    aiGoalSelector && aiGoalSelector.options[aiGoalSelector.selectedIndex];
+
+  if (!selectedOption || !selectedOption.value) {
+    showToast("Please enter a goal target in the assessment or add a goal.");
+    scrollToSection("goals");
+    return;
+  }
+
+  const goalName = selectedOption.getAttribute("data-name") || "Financial Goal";
+  const target = parseFloat(selectedOption.getAttribute("data-target")) || 0;
+  const current = parseFloat(selectedOption.getAttribute("data-current")) || 0;
+  const timelineMonths =
+    parseInt(selectedOption.getAttribute("data-timeline"), 10) || 6;
+
+  const payload = {
+    name: goalName,
+    target,
+    current,
+    timelineMonths,
+    income: assessment?.income || 0,
+    expenses: assessment?.expenses || 0,
+    savings: assessment?.savings || 0,
+    riskPreference: assessment?.riskPreference || "Medium",
+  };
+
+  if (generateAiGoalPlanBtn) {
+    generateAiGoalPlanBtn.disabled = true;
+    generateAiGoalPlanBtn.innerHTML =
+      '<i data-lucide="loader-2" class="spin"></i><span>Planning...</span>';
+  }
+  if (aiGoalPlanLoading) aiGoalPlanLoading.classList.remove("hidden");
+  if (aiGoalPlanError) aiGoalPlanError.classList.add("hidden");
+  if (aiGoalPlanContent) aiGoalPlanContent.classList.add("hidden");
+  refreshIcons();
+
+  try {
+    const response = await fetch("/api/ai/goal-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result || result.success === false) {
+      throw new Error(
+        result?.error ||
+          result?.fallbackMessage ||
+          "AI goal planning service temporarily unavailable.",
+      );
+    }
+
+    cachedAiGoalPlan = result;
+    saveMonthlyAiContent("goalPlan", result);
+    renderAiGoalPlan(result);
+    showToast("✨ AI Goal Plan roadmap generated!");
+  } catch (err) {
+    console.warn("AI Goal Plan Error:", err);
+    if (aiGoalPlanError) {
+      aiGoalPlanError.classList.remove("hidden");
+      if (aiGoalPlanErrorMsg) {
+        aiGoalPlanErrorMsg.textContent =
+          err.message ||
+          "AI goal planning is temporarily unavailable. Your existing goal tracking continues to operate.";
+      }
+    }
+  } finally {
+    if (aiGoalPlanLoading) aiGoalPlanLoading.classList.add("hidden");
+    if (generateAiGoalPlanBtn) {
+      generateAiGoalPlanBtn.disabled = false;
+      generateAiGoalPlanBtn.innerHTML =
+        '<i data-lucide="sparkles"></i><span>Generate AI Goal Plan</span>';
+    }
+    refreshIcons();
+  }
+}
+
+function renderAiGoalPlan(data) {
+  if (!aiGoalPlanContent || !data) return;
+  const m = data.math || {};
+  const p = data.plan || {};
+
+  const approachSteps = (p.suggestedApproach || [])
+    .map(
+      (item, idx) => `
+    <div class="ai-approach-step">
+      <div class="ai-step-num">${idx + 1}</div>
+      <div class="ai-step-content">
+        <h5>${item.step || "Action Step"}</h5>
+        <p>${item.detail || item}</p>
+      </div>
+    </div>`,
+    )
+    .join("");
+
+  const milestonesHtml = (p.milestonePlan || [])
+    .map(
+      (ms) => `
+    <div class="ai-milestone-item">
+      <div class="ai-milestone-head">
+        <span class="ai-milestone-title">${ms.milestone}</span>
+        <span class="ai-milestone-amt">${ms.targetAmount || ""}</span>
+      </div>
+      <div class="ai-milestone-focus">${ms.focus}</div>
+    </div>`,
+    )
+    .join("");
+
+  const challengesList = (p.potentialChallenges || [])
+    .map(
+      (c) =>
+        `<li><i data-lucide="alert-triangle" style="color:var(--amber);"></i><span>${c}</span></li>`,
+    )
+    .join("");
+
+  aiGoalPlanContent.innerHTML = `
+    <!-- MATHEMATICAL ENGINE RESULTS -->
+    <div class="ai-math-summary-grid">
+      <div class="ai-math-card">
+        <div class="lbl">Goal Target</div>
+        <div class="val">${formatINR(m.target)}</div>
+        <div class="sub">${m.completionPercentage}% already saved</div>
+      </div>
+      <div class="ai-math-card">
+        <div class="lbl">Remaining Amount</div>
+        <div class="val">${formatINR(m.remaining)}</div>
+        <div class="sub">Across ${m.timelineMonths} months</div>
+      </div>
+      <div class="ai-math-card highlight">
+        <div class="lbl">Required Monthly Contribution</div>
+        <div class="val">${formatINR(m.requiredMonthlyContribution)} / mo</div>
+        <div class="sub">Math: ${formatINR(m.remaining)} ÷ ${m.timelineMonths} mos</div>
+      </div>
+      <div class="ai-math-card">
+        <div class="lbl">Current Monthly Savings</div>
+        <div class="val">${formatINR(m.currentMonthlySavings)} / mo</div>
+        <div class="sub">${m.currentSurplus >= m.requiredMonthlyContribution ? "✓ Surplus covers requirement" : "⚡ Adjustment recommended"}</div>
+      </div>
+    </div>
+
+    <!-- AI CONTEXTUAL ROADMAP -->
+    <div class="ai-overview-box">
+      <div class="ai-box-head"><i data-lucide="compass"></i>Goal Strategy & Feasibility</div>
+      <p style="margin-bottom:8px;">${p.goalSummary || "Plan roadmap for your financial goal."}</p>
+      <p style="color:var(--text-dim);font-size:0.9rem;">${p.feasibilityAssessment || ""}</p>
+    </div>
+
+    ${
+      approachSteps
+        ? `
+    <div>
+      <h4 style="font-size:0.95rem;margin-bottom:12px;color:var(--text);display:flex;align-items:center;gap:8px;">
+        <i data-lucide="list-checks" style="color:var(--teal-light);"></i>Suggested Step-by-Step Approach
+      </h4>
+      <div class="ai-approach-steps">${approachSteps}</div>
+    </div>`
+        : ""
+    }
+
+    ${
+      milestonesHtml
+        ? `
+    <div>
+      <h4 style="font-size:0.95rem;margin-bottom:12px;color:var(--text);display:flex;align-items:center;gap:8px;">
+        <i data-lucide="milestone" style="color:var(--teal-light);"></i>Strategic Milestones
+      </h4>
+      <div class="ai-milestones-grid">${milestonesHtml}</div>
+    </div>`
+        : ""
+    }
+
+    ${
+      challengesList
+        ? `
+    <div class="ai-column-card improvements" style="border-radius:12px;">
+      <div class="ai-column-head"><i data-lucide="shield-alert"></i>Potential Challenges & Contingency Advice</div>
+      <ul class="ai-bullet-list">${challengesList}</ul>
+    </div>`
+        : ""
+    }
+
+    ${
+      p.progressAdvice
+        ? `
+    <div class="ai-focus-box">
+      <div class="ai-focus-icon"><i data-lucide="sparkles"></i></div>
+      <div class="ai-focus-text">
+        <h4>Progress Advice</h4>
+        <p>${p.progressAdvice}</p>
+      </div>
+    </div>`
+        : ""
+    }
+
+    <p style="font-size:0.72rem;color:var(--text-faint);font-style:italic;margin-top:12px;text-align:center;">Not advice from a certified financial advisor.</p>
+  `;
+
+  aiGoalPlanContent.classList.remove("hidden");
+  refreshIcons();
+}
+
+if (generateAiGoalPlanBtn) {
+  generateAiGoalPlanBtn.addEventListener("click", generateAiGoalPlan);
+}
+if (retryAiGoalPlanBtn) {
+  retryAiGoalPlanBtn.addEventListener("click", generateAiGoalPlan);
+}
+
+/* ============================================================
+   GOALS — stored in LocalStorage
    ============================================================ */
 function getGoals() {
   return JSON.parse(localStorage.getItem("fha_goals") || "[]");
@@ -1773,6 +2591,7 @@ document.getElementById("goalForm").addEventListener("submit", function (e) {
   renderGoals();
   renderMonthlyReport();
   renderProfile();
+  updateAiGoalSelector();
   this.reset();
   showToast("Goal added.");
 });
@@ -1784,6 +2603,7 @@ function deleteGoal(id) {
   renderGoals();
   renderMonthlyReport();
   renderProfile();
+  updateAiGoalSelector();
   showToast("Goal deleted.");
 }
 
@@ -1796,6 +2616,7 @@ function renderGoals() {
     empty.classList.remove("hidden");
     grid.innerHTML = "";
     if (assessment) renderGoalProgress(assessment);
+    updateAiGoalSelector();
     return;
   }
   empty.classList.add("hidden");
@@ -1817,6 +2638,7 @@ function renderGoals() {
     .join("");
   refreshIcons();
   if (assessment) renderGoalProgress(assessment);
+  updateAiGoalSelector();
 }
 
 /* ---------- CLEAR DATA ---------- */
@@ -1830,6 +2652,9 @@ document.getElementById("clearDataBtn").addEventListener("click", function () {
     localStorage.removeItem("fha_spending");
     localStorage.removeItem("fha_budgets");
     localStorage.removeItem("fha_goals");
+    localStorage.removeItem("fha_ai_summary");
+    localStorage.removeItem("fha_ai_recommendations");
+    localStorage.removeItem("fha_ai_goal_plan");
     localStorage.removeItem(SAVED_PDFS_KEY);
     localStorage.removeItem(MONTHLY_ANALYSES_KEY);
     localStorage.removeItem(MONTHLY_DOCUMENTS_KEY);
@@ -1867,5 +2692,6 @@ function restoreFromStorage() {
   renderMonthlyReport();
   renderGoals();
   renderProfile();
+  updateAiGoalSelector();
 }
 restoreFromStorage();

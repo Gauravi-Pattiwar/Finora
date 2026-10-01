@@ -457,6 +457,38 @@
               <div class="chart-box"><canvas id="chartSpendMini"></canvas></div>
             </div>
           </div>
+
+          <!-- AI FINANCIAL HEALTH SUMMARY -->
+          <div class="ai-summary-card" id="aiSummaryCard">
+            <div class="ai-card-header">
+              <div class="ai-card-title">
+                <div class="ai-badge-icon"><i data-lucide="sparkles"></i></div>
+                <div>
+                  <h3>✨ AI Financial Health Summary</h3>
+                  <p class="ai-card-subtitle">Personalized AI evaluation of your cash flow, savings, debt, and preparedness based on your assessment.</p>
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary" id="generateAiSummaryBtn">
+                <i data-lucide="sparkles"></i><span>Generate AI Summary</span>
+              </button>
+            </div>
+
+            <div id="aiSummaryLoading" class="ai-loading-state hidden">
+              <div class="ai-spinner"><i data-lucide="loader-2" class="spin"></i></div>
+              <p>Analyzing your financial profile with Finora AI...</p>
+            </div>
+
+            <div id="aiSummaryError" class="ai-error-banner hidden">
+              <i data-lucide="alert-circle"></i>
+              <div class="ai-error-text">
+                <strong>AI Analysis Notice:</strong>
+                <span id="aiSummaryErrorMsg">AI analysis is temporarily unavailable. Your existing financial dashboard and rule-based analysis are still available.</span>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" id="retryAiSummaryBtn">Retry</button>
+            </div>
+
+            <div id="aiSummaryContent" class="ai-summary-body hidden"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -693,16 +725,45 @@
           <div class="eyebrow">STEP 4</div>
           <h2>Personalized Recommendations</h2>
           <p>
-            Simple, explainable, rule-based guidance â€” every suggestion tells
-            you why you're seeing it.
+            Holistic, explainable guidance tailored to your financial indicators — combining transparent rule-based metrics with personalized AI intelligence.
           </p>
         </div>
+
+        <div class="rec-control-bar" id="recControlBar">
+          <div class="rec-mode-tabs" role="tablist">
+            <button type="button" class="rec-tab active" id="recTabAi">
+              <i data-lucide="sparkles"></i><span>✨ AI Recommendations</span>
+            </button>
+            <button type="button" class="rec-tab" id="recTabRule">
+              <i data-lucide="sliders"></i><span>Rule-Based Engine</span>
+            </button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="refreshAiRecsBtn">
+            <i data-lucide="refresh-cw"></i><span>Refresh AI Insights</span>
+          </button>
+        </div>
+
         <div id="recEmpty" class="empty-state card">
           <i data-lucide="lightbulb"></i>
           <p>
             Complete the assessment to see personalized recommendations here.
           </p>
         </div>
+
+        <div id="aiRecsLoading" class="ai-loading-state hidden">
+          <div class="ai-spinner"><i data-lucide="loader-2" class="spin"></i></div>
+          <p>Generating your personalized, explainable recommendations with Finora AI...</p>
+        </div>
+
+        <div id="aiRecsError" class="ai-error-banner hidden">
+          <i data-lucide="alert-circle"></i>
+          <div class="ai-error-text">
+            <strong>AI Notice:</strong>
+            <span id="aiRecsErrorMsg">AI analysis is temporarily unavailable. Showing transparent rule-based recommendations.</span>
+          </div>
+        </div>
+
+        <div class="rec-list hidden" id="aiRecList"></div>
         <div class="rec-list hidden" id="recList"></div>
       </div>
     </section>
@@ -777,6 +838,41 @@
           <p>No goals yet. Add your first financial goal above.</p>
         </div>
         <div class="goals-grid" id="goalsGrid"></div>
+
+        <!-- AI GOAL PLANNER -->
+        <div class="ai-goal-planner" id="aiGoalPlannerCard">
+          <div class="ai-card-header">
+            <div class="ai-card-title">
+              <div class="ai-badge-icon"><i data-lucide="target"></i></div>
+              <div>
+                <h3>✨ AI Goal Planner</h3>
+                <p class="ai-card-subtitle">AI-assisted roadmap and practical strategies to help you reach your financial milestones.</p>
+              </div>
+            </div>
+            <div class="ai-goal-actions">
+              <select id="aiGoalSelector" class="ai-goal-select" title="Select goal to plan"></select>
+              <button type="button" class="btn btn-primary" id="generateAiGoalPlanBtn">
+                <i data-lucide="sparkles"></i><span>Generate AI Goal Plan</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="aiGoalPlanLoading" class="ai-loading-state hidden">
+            <div class="ai-spinner"><i data-lucide="loader-2" class="spin"></i></div>
+            <p>Calculating roadmap and generating personalized AI goal guidance...</p>
+          </div>
+
+          <div id="aiGoalPlanError" class="ai-error-banner hidden">
+            <i data-lucide="alert-circle"></i>
+            <div class="ai-error-text">
+              <strong>Goal Planner Notice:</strong>
+              <span id="aiGoalPlanErrorMsg">AI goal planning is temporarily unavailable. Your basic calculations remain accessible.</span>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="retryAiGoalPlanBtn">Retry</button>
+          </div>
+
+          <div id="aiGoalPlanContent" class="ai-goal-plan-body hidden"></div>
+        </div>
       </div>
     </section>
 
