@@ -309,6 +309,9 @@ async function authenticate(action, email, password, username) {
   const cleanEmail = (email || "").trim().toLowerCase();
   const cleanUsername = (username || "").trim();
   const cleanPassword = (password || "").trim();
+  const allowLocalAuth =
+    window.location.protocol === "file:" ||
+    ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 
   // 1. Attempt API authentication if not running on file: protocol
   let apiSuccess = false;
@@ -338,22 +341,31 @@ async function authenticate(action, email, password, username) {
           result.username || cleanUsername || result.email,
         );
         apiSuccess = true;
-      } else if (response.status === 409 || response.status === 401) {
-        if (result?.error) throw new Error(result.error);
+      } else {
+        throw new Error(
+          result?.error ||
+            `Authentication service returned ${response.status}.`,
+        );
       }
     } catch (err) {
       if (
-        err.message &&
-        (err.message.includes("already registered") ||
-          err.message.includes("Incorrect password"))
+        !allowLocalAuth ||
+        (err.message &&
+          (err.message.includes("already registered") ||
+            err.message.includes("Incorrect password")))
       ) {
         throw err;
       }
-      // Fallback to local authentication for network errors/500/offline/no-API
+      // Local development can continue without the API.
     }
   }
 
   if (apiSuccess) return;
+  if (!allowLocalAuth) {
+    throw new Error(
+      "Authentication API is unavailable. Please try again later.",
+    );
+  }
 
   // 2. Local Authentication Engine (Offline & Local Prototype)
   const users = getRegisteredUsers();
