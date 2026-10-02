@@ -235,30 +235,51 @@ function saveCurrentUserWorkspace() {
 
 function loadCurrentUserWorkspace() {
   const userKey = getCurrentUserKey();
+  const workspaceFields = {
+    assessment: "fha_assessment",
+    spending: "fha_spending",
+    budgets: "fha_budgets",
+    goals: "fha_goals",
+    savedPdfs: "fha_saved_pdfs",
+    monthlyAnalyses: "fha_monthly_analyses",
+    monthlyDocuments: "fha_monthly_documents",
+  };
+  const hasSignedInUser = Boolean(
+    localStorage.getItem("fha_user_email") ||
+      localStorage.getItem("fha_user_name"),
+  );
+  if (hasSignedInUser) {
+    Object.values(workspaceFields).forEach((key) =>
+      localStorage.removeItem(key),
+    );
+    ["fha_ai_summary", "fha_ai_recommendations", "fha_ai_goal_plan"].forEach(
+      (key) => localStorage.removeItem(key),
+    );
+
+    document.getElementById("assessmentForm").reset();
+    document.getElementById("budgetForm").reset();
+    document.getElementById("goalForm").reset();
+    document.querySelectorAll(".spend-input").forEach((input) => {
+      input.value = "";
+    });
+    lastValues = null;
+    lastScores = null;
+    document.getElementById("dashboardContent").classList.add("hidden");
+    document.getElementById("dashboardEmpty").classList.remove("hidden");
+    document.getElementById("recList").classList.add("hidden");
+    document.getElementById("recEmpty").classList.remove("hidden");
+    document.getElementById("demoBanner").classList.remove("show");
+  }
+
   try {
     const raw = localStorage.getItem(userKey);
-    if (raw) {
-      const ws = JSON.parse(raw);
-      if (ws.assessment)
-        localStorage.setItem("fha_assessment", JSON.stringify(ws.assessment));
-      if (ws.spending)
-        localStorage.setItem("fha_spending", JSON.stringify(ws.spending));
-      if (ws.budgets)
-        localStorage.setItem("fha_budgets", JSON.stringify(ws.budgets));
-      if (ws.goals) localStorage.setItem("fha_goals", JSON.stringify(ws.goals));
-      if (ws.savedPdfs)
-        localStorage.setItem(SAVED_PDFS_KEY, JSON.stringify(ws.savedPdfs));
-      if (ws.monthlyAnalyses)
-        localStorage.setItem(
-          MONTHLY_ANALYSES_KEY,
-          JSON.stringify(ws.monthlyAnalyses),
-        );
-      if (ws.monthlyDocuments)
-        localStorage.setItem(
-          MONTHLY_DOCUMENTS_KEY,
-          JSON.stringify(ws.monthlyDocuments),
-        );
-    }
+    if (!raw) return;
+    const workspace = JSON.parse(raw);
+    Object.entries(workspaceFields).forEach(([field, key]) => {
+      if (workspace[field] !== undefined && workspace[field] !== null) {
+        localStorage.setItem(key, JSON.stringify(workspace[field]));
+      }
+    });
   } catch {}
 }
 
@@ -317,8 +338,6 @@ async function authenticate(action, email, password, username) {
   let apiSuccess = false;
   if (window.location.protocol !== "file:") {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -328,9 +347,7 @@ async function authenticate(action, email, password, username) {
           email: cleanEmail,
           password: cleanPassword,
         }),
-        signal: controller.signal,
       });
-      clearTimeout(timeoutId);
 
       const result = await response.json().catch(() => null);
       if (response.ok && result?.token) {
@@ -2664,18 +2681,40 @@ document.getElementById("clearDataBtn").addEventListener("click", function () {
       "This will permanently delete your saved assessment, spending data and goals from this browser. Continue?",
     )
   ) {
-    localStorage.removeItem("fha_assessment");
-    localStorage.removeItem("fha_spending");
-    localStorage.removeItem("fha_budgets");
-    localStorage.removeItem("fha_goals");
-    localStorage.removeItem("fha_ai_summary");
-    localStorage.removeItem("fha_ai_recommendations");
-    localStorage.removeItem("fha_ai_goal_plan");
-    localStorage.removeItem(SAVED_PDFS_KEY);
-    localStorage.removeItem(MONTHLY_ANALYSES_KEY);
-    localStorage.removeItem(MONTHLY_DOCUMENTS_KEY);
+    [
+      "fha_assessment",
+      "fha_spending",
+      "fha_budgets",
+      "fha_goals",
+      "fha_ai_summary",
+      "fha_ai_recommendations",
+      "fha_ai_goal_plan",
+      SAVED_PDFS_KEY,
+      MONTHLY_ANALYSES_KEY,
+      MONTHLY_DOCUMENTS_KEY,
+    ].forEach((key) => localStorage.removeItem(key));
+    localStorage.removeItem(getCurrentUserKey());
+
+    document.getElementById("assessmentForm").reset();
+    document.getElementById("budgetForm").reset();
+    document.getElementById("goalForm").reset();
+    document.querySelectorAll(".spend-input").forEach((input) => {
+      input.value = "";
+    });
+    lastValues = null;
+    lastScores = null;
+    document.getElementById("dashboardContent").classList.add("hidden");
+    document.getElementById("dashboardEmpty").classList.remove("hidden");
+    document.getElementById("recList").classList.add("hidden");
+    document.getElementById("recEmpty").classList.remove("hidden");
+    document.getElementById("demoBanner").classList.remove("show");
+    renderSpending(getSpendData());
+    renderBudget();
+    renderMonthlyReport();
+    renderGoals();
+    renderProfile();
+    updateAiGoalSelector();
     showToast("All local data cleared.");
-    setTimeout(() => location.reload(), 700);
   }
 });
 

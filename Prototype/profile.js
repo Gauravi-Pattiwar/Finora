@@ -21,6 +21,10 @@ function getCurrentUserKey() {
 function getJson(key, fallback) {
   try {
     const userKey = getCurrentUserKey();
+    const hasSignedInUser = Boolean(
+      localStorage.getItem("fha_user_email") ||
+        localStorage.getItem("fha_user_name"),
+    );
     const rawWs = localStorage.getItem(userKey);
     if (rawWs) {
       const ws = JSON.parse(rawWs);
@@ -38,6 +42,7 @@ function getJson(key, fallback) {
         return ws[prop];
       }
     }
+    if (hasSignedInUser) return fallback;
     const val = localStorage.getItem(key);
     return val ? JSON.parse(val) : fallback;
   } catch {
