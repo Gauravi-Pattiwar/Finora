@@ -342,14 +342,18 @@ async function authenticate(action, email, password, username) {
         );
         apiSuccess = true;
       } else {
-        throw new Error(
+        const error = new Error(
           result?.error ||
             `Authentication service returned ${response.status}.`,
         );
+        error.status = response.status;
+        throw error;
       }
     } catch (err) {
       if (
         !allowLocalAuth ||
+        err.status === 409 ||
+        err.status === 401 ||
         (err.message &&
           (err.message.includes("already registered") ||
             err.message.includes("Incorrect password")))

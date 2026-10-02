@@ -2096,7 +2096,7 @@ footer {
   padding: 12px 20px;
   border-radius: 10px;
   font-size: 0.87rem;
-  z-index: 200;
+  z-index: 400;
   display: none;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   animation: toastIn 0.2s ease;

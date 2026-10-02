@@ -27,6 +27,22 @@ function normalizeUsername(value) {
     .toLowerCase();
 }
 
+function registrationConflictMessage(existing, email, username) {
+  const emailExists = normalizeEmail(existing.email) === email;
+  const usernameExists = normalizeUsername(existing.username) === username;
+
+  if (emailExists && usernameExists) {
+    return "An account with this email address and username already exists. Please sign in or use different details.";
+  }
+  if (emailExists) {
+    return "An account with this email address already exists. Please sign in or use a different email address.";
+  }
+  if (usernameExists) {
+    return "That username is already taken. Please choose a different username.";
+  }
+  return "An account with this email address or username already exists. Please sign in or use different details.";
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -70,9 +86,13 @@ export default async function handler(req, res) {
           $or: [{ email }, { username: effectiveUsername }],
         });
         if (existing) {
-          return res
-            .status(409)
-            .json({ error: "That username or email is already registered" });
+          return res.status(409).json({
+            error: registrationConflictMessage(
+              existing,
+              email,
+              effectiveUsername,
+            ),
+          });
         }
         const passwordHash = await bcrypt.hash(password, 10);
         const result = await usersCollection.insertOne({
@@ -96,9 +116,13 @@ export default async function handler(req, res) {
         (u) => u.email === email || u.username === effectiveUsername,
       );
       if (existingMem) {
-        return res
-          .status(409)
-          .json({ error: "That username or email is already registered" });
+        return res.status(409).json({
+          error: registrationConflictMessage(
+            existingMem,
+            email,
+            effectiveUsername,
+          ),
+        });
       }
       const passwordHash = await bcrypt.hash(password, 8);
       const newUser = {
@@ -167,4 +191,3 @@ export default async function handler(req, res) {
       .json({ error: "Authentication service error. Please try again." });
   }
 }
-
